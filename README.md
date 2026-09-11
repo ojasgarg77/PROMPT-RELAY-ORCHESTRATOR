@@ -80,8 +80,6 @@ GROQ_API_KEY=your_groq_key_here
 TAVILY_API_KEY=your_tavily_key_here
 ```
 
-**Never commit this file.** Make sure your `.gitignore` includes `.env`.
-
 ### Getting an OpenRouter API key
 1. Sign up at [openrouter.ai](https://openrouter.ai).
 2. Go to **Keys** in your account settings.
