@@ -20,8 +20,8 @@ Choose Speed, Research, Coding, or Business as your priority. Each category maps
 **Garbage-output detection**
 The improver step checks for tool-call-style garbage tokens in its output and retries the same model (up to a few times) before giving up on it entirely.
 
-**Agentic web search**
-If the answering model determines it needs current information (or you explicitly ask for a search), it responds with a special `SEARCH:<query>` signal instead of a direct answer. The tool detects this, queries the Tavily search API, feeds the results back into the conversation, and asks the model to produce a real answer using those results.
+**Structured decision-making with Pydantic**
+Rather than parsing free-text signals, the answering model returns a validated, structured decision — either a direct answer or a request to search the web — using Pydantic models (`SearchRequest` / `DirectAnswer`) enforced via LangChain's structured output. If a search is requested, the tool queries the Tavily search API, feeds the results back into the conversation, and asks the model to produce a real answer using those results.
 
 **Conversation memory with auto-summarization**
 The tool tracks conversation history across turns. Once the history grows past a threshold, it's automatically summarized (split into "user questions" and "AI responses" sections) and replaced with a condensed summary, keeping later prompts from growing unmanageably long.
@@ -80,8 +80,6 @@ GROQ_API_KEY=your_groq_key_here
 TAVILY_API_KEY=your_tavily_key_here
 ```
 
-**Never commit this file.** Make sure your `.gitignore` includes `.env`.
-
 ### Getting an OpenRouter API key
 1. Sign up at [openrouter.ai](https://openrouter.ai).
 2. Go to **Keys** in your account settings.
@@ -115,9 +113,14 @@ Choose your provider, choose your priority category, and start chatting. The too
 
 ## Project status
 
-This project is under active development. Major fallback issues are left unadressed, I also aim to integrate selenium/playwright in the same.The code is entirely handwritten.
+This project is under active development, written entirely by hand while I'm still learning Python — so parts of it are a work in progress rather than a finished, polished tool. Planned future work includes integrating Selenium/Playwright for browser control as an additional AI-triggerable action.
+
+Identified unfixed issues:
+
+1. `chosen_category.remove()` permanently mutates the shared category list across turns, rather than working from a per-turn copy the way the improver step already does.
+2. `global_fallback_openrouter` / `global_fallback_nvidia` are defined but not yet wired into any actual fallback logic for the answering stage.
 
 ## Notes
 
 - If a model repeatedly fails, check that the corresponding API key is valid and that you haven't exceeded that provider's free-tier rate limits.
-- Web search requires a valid `TAVILY_API_KEY` — without one, the `SEARCH:` feature will raise an error if triggered.
+- Web search requires a valid `TAVILY_API_KEY` — without one, a search decision will raise an error if triggered.

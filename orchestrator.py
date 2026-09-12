@@ -4,6 +4,8 @@ from langchain_openai import ChatOpenAI
 import random
 import time
 from tavily import TavilyClient
+from pydantic import BaseModel,Field
+from typing import List,Union,Literal
 
 load_dotenv()
 
@@ -13,6 +15,46 @@ MODEL_TO_CATEOGRY={
     "1":"Openrouter",
     "2":"Nvidia"
 }
+
+class SearchRequest(BaseModel):
+    action:Literal["search"]="search"
+    query_to_tavily:str=Field(
+        description="The search query."
+    )
+
+class DirectAnswer(BaseModel):
+    action:Literal["answer"]="answer"
+    final_answer:str=Field(
+        description="The final answer to the user."
+    )
+
+class FinalLlmAnswer(BaseModel):
+    decision: Union[SearchRequest,DirectAnswer]=Field(discriminator="action")
+
+global_fallback_openrouter=[
+    "nvidia/nemotron-3.5-lightning:free",
+    "liquid/lfm-2.5-2.6b:free",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "google/gemma-4-31b-it:free",
+    "poolside/laguna-s-2.1:free",
+    "poolside/laguna-xs-2.1:free",
+    "cohere/north-mini-code:free",
+    "nvidia/nemotron-3-super-120b-a12b:free"]
+
+global_fallback_nvidia=[
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+    "google/gemma-4-31b-it",
+    "openai/gpt-oss-20b",
+    "deepseek-ai/deepseek-v4-flash-0731",
+    "deepseek-ai/deepseek-v4-pro-0813",
+    "moonshotai/kimi-k3",
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "google/diffusiongemma-26b-a4b-it",
+    "poolside/laguna-xs-2.1",
+    "mistralai/mistral-nemotron",
+    "nvidia/nemotron-3-super-120b-a12b"]
 
 while True:
     provider=input("""CHOOSE YOUR AI MODEL-
@@ -69,11 +111,13 @@ if provider=="Openrouter":
     chosen_api_key=os.getenv("OPENROUTER_API_KEY")
     cateogry=MODEL_CATEGORIES
     improver=FREE_MODELS
+    global_fallback=global_fallback_openrouter
 else:
     chosen_base_url="https://integrate.api.nvidia.com/v1"
     chosen_api_key=os.getenv("NVIDIA_API_KEY")
     cateogry=MODEL_CATEGORIES_NVIDIA
     improver=FREE_MODELS_NVIDIA
+    global_fallback=global_fallback_nvidia
 
 NUMBER_TO_CATEGORY={
     "1":"Speed",
@@ -139,7 +183,7 @@ while True:
                     {previous_question}
 
                     Rewrite the user's message into a clearer, more concise prompt.
-                    Do not answer the request — output ONLY the single best improved prompt and nothing else.
+                    Do not answer the request output ONLY the single best improved prompt and nothing else.
 
                 Example:
                 Input: "Explain Elon Musk and Jeff Bezos connection to daily trade actually leave out Jeff Bezos and include finance too"
@@ -231,58 +275,55 @@ while True:
                 base_url=chosen_base_url,
                 api_key=chosen_api_key
             )
+            structured_final_answer=answer_llm.with_structured_output(FinalLlmAnswer, include_raw=True)
+            response=structured_final_answer.invoke(
+                [("system","""You are an AI assistant.
+                Decide whether u need to run a live web search for answering the user accurately or if you can provide a direct answer.
+                End your response with one relevant question if you decide not to search and want to continue the conversation naturally.
+                Here is the history of the conversation helping you to understand context.""")]+conversation_history)
+                
+            if response["parsed"] is None:
+                print(f"Model {chosen_model} threw an error. Retrying with another model.")
+                chosen_category.remove(chosen_model)
+                attempts+=1
+                continue
 
-            searching=True
-            searches=0
-            max_searches=3
-            while searching and searches<max_searches:
+            decision_object=response["parsed"].decision
+            tokens_from_router=response["raw"].usage_metadata["total_tokens"]
+            
+            if isinstance(decision_object,SearchRequest):
+                query=decision_object.query_to_tavily
+                tavilyclient=TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+                tavily_response=tavilyclient.search(query)
+                query_results=tavily_response["results"]
 
-                final_response=answer_llm.invoke(
+                for query_result in query_results:
+                    data1=query_result["title"]
+                    data2=query_result["content"]
+                    total_data=("SEARCH RESULTS"+data1+" "+data2)
+                    conversation_history.append(("user",total_data)) 
+
+                web_results_analyzed=answer_llm.invoke(
                     [("system", """Answer the user's question clearly and helpfully.
-                    End your response with one relevant follow-up question to continue the conversation naturally. 
-                    Here is the history of the conversation aiding you in understanding the context
-                    If you need current information to answer the user, or if the user specifically asks for a web search respond with exactly SEARCH:<your query> nothing else, otherwise just answer normally.""")]+conversation_history
-                    )
-                search_final_response=final_response.content.strip()
-                if "SEARCH:" in search_final_response:
-                    query=search_final_response.removeprefix("SEARCH:")
-                    tavilyclient=TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
-                    response=tavilyclient.search(query)
+                End your response with one relevant follow-up question to continue the conversation naturally.
+                Here is the history of the conversation aiding you in understanding the context.""")]+conversation_history
+                )
+                conversation_history.append(("assistant", web_results_analyzed.content))
+                full_history.append(("assistant", web_results_analyzed.content))
+                print("\nFINAL ANSWER")
+                print(web_results_analyzed.content)
+                token_used+=tokens_from_router+web_results_analyzed.usage_metadata["total_tokens"]
+                history_points+=len(query_results)+1  
 
-                    query_results=response["results"]
-
-                    for query_result in query_results:
-                        data1=query_result["title"]
-                        data2=query_result["content"]
-                        total_data=("SEARCH RESULTS"+data1+" "+data2)
-                        conversation_history.append(("user",total_data))
-
-                    web_results_analyzed=answer_llm.invoke(
-                        [("system", """Answer the user's question clearly and helpfully.
-                    End your response with one relevant follow-up question to continue the conversation naturally.
-                    If you need current information to answer the user, or if the user specifically asks for a web search respond with exactly SEARCH:<your query> nothing else, otherwise just answer normally.
-                    If search results are already present them use instead of searching again.
-                    Here is the history of the conversation aiding you in understanding the context.""")]+conversation_history
-                    )
-                    conversation_history.append(("assistant", web_results_analyzed.content))
-                    full_history.append(("assistant", web_results_analyzed.content))
-                    print("\nFINAL ANSWER")
-                    print(web_results_analyzed.content)
-                    token_used+=final_response.usage_metadata["total_tokens"]+web_results_analyzed.usage_metadata["total_tokens"]
-                    searches+=1
-                    history_points+=len(query_results)+1
-                    searching=False
-
-                else:
-                    conversation_history.append(("assistant", final_response.content))
-                    full_history.append(("assistant", final_response.content))
-                    print("\nFINAL ANSWER")
-                    print(final_response.content)
-                    token_used+=final_response.usage_metadata["total_tokens"]
-                    history_points+=1
-                    searching=False
-            break        
-
+            elif isinstance(decision_object,DirectAnswer):
+                final_text=decision_object.final_answer
+                conversation_history.append(("assistant", final_text))
+                full_history.append(("assistant", final_text))
+                print("\nFINAL ANSWER")
+                print(final_text)
+                token_used+=tokens_from_router
+                history_points+=1
+            break                                                    
         except Exception as e:
             print(f"Model {chosen_model} failed at the task({e}).Retrying with another model ")
             chosen_category.remove(chosen_model)
@@ -297,7 +338,7 @@ while True:
     end=time.time()
     duration=end-start
     print(f"Response took {duration:.2f} seconds")
-    print(f"Response took {token_used} tokens")
+    print(f"Total tokens used are {token_used}.")
 
     if history_points>=6:
 
@@ -313,4 +354,4 @@ while True:
         summary_data=summary.content
         summarised_data.append(summary_data)
         conversation_history=[("assistant", f"Summary of previous context is {summary_data}")]
-        history_points=1
+        history_points=1     
