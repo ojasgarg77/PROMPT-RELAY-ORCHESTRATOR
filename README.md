@@ -13,15 +13,16 @@ Pick between OpenRouter or NVIDIA as your model provider at startup. Each has it
 **Priority-based model categories**
 Choose Speed, Research, Coding, or Business as your priority. Each category maps to a curated list of free models suited to that kind of task, and a model is picked at random from that list for each answer.
 
-**Automatic retry and fallback, at two separate stages**
-- *Improver stage:* if the randomly chosen improver model fails or returns garbled output, it's dropped from the list and another is tried. If every model in the primary provider's improver list fails, the tool automatically falls back to a set of free Groq models before giving up and using your raw, unimproved input as a last resort.
-- *Answering stage:* if the randomly chosen answering model fails, it's removed from the category's list and another model from the same category is tried instead.
+**Three-tier retry and fallback**
+- *Improver stage:* if the randomly chosen improver model fails or returns garbled output, it's dropped from a per-turn candidate list and another is tried. If every model in the primary provider's improver list fails, the tool falls back to a set of free Groq models before finally falling back to using your raw, unimproved input.
+- *Answering stage:* if the randomly chosen answering model fails, it's dropped from a per-turn candidate list (the shared category list itself is never permanently modified) and another model from the same category is tried.
+- *Global fallback:* if every model in the chosen priority category fails, the tool automatically switches to a broader, provider-wide pool of fallback models before giving up entirely.
 
 **Garbage-output detection**
 The improver step checks for tool-call-style garbage tokens in its output and retries the same model (up to a few times) before giving up on it entirely.
 
 **Structured decision-making with Pydantic**
-Rather than parsing free-text signals, the answering model returns a validated, structured decision — either a direct answer or a request to search the web — using Pydantic models (`SearchRequest` / `DirectAnswer`) enforced via LangChain's structured output. If a search is requested, the tool queries the Tavily search API, feeds the results back into the conversation, and asks the model to produce a real answer using those results.
+Rather than parsing free-text signals, the answering model returns a validated, structured decision — either a direct answer or a request to search the web — using Pydantic models (`SearchRequest` / `DirectAnswer`) enforced via LangChain's structured output. A direct answer includes its own natural follow-up question as a structured field, rather than being extracted from raw text. If a search is requested, the tool queries the Tavily search API, feeds the results back into the conversation, and asks the model to produce a real answer using those results.
 
 **Conversation memory with auto-summarization**
 The tool tracks conversation history across turns. Once the history grows past a threshold, it's automatically summarized (split into "user questions" and "AI responses" sections) and replaced with a condensed summary, keeping later prompts from growing unmanageably long.
@@ -115,10 +116,10 @@ Choose your provider, choose your priority category, and start chatting. The too
 
 This project is under active development, written entirely by hand while I'm still learning Python — so parts of it are a work in progress rather than a finished, polished tool. Planned future work includes integrating Selenium/Playwright for browser control as an additional AI-triggerable action.
 
-Identified unfixed issues:
+The category-list mutation bug and the missing global fallback wiring (previously listed here as known issues) have both been fixed: the answering stage now works from a per-turn copy of its model list, and a genuine global fallback pool kicks in if an entire category fails.
 
-1. `chosen_category.remove()` permanently mutates the shared category list across turns, rather than working from a per-turn copy the way the improver step already does.
-2. `global_fallback_openrouter` / `global_fallback_nvidia` are defined but not yet wired into any actual fallback logic for the answering stage.
+Known open item:
+- After a search-based turn, the follow-up question isn't tracked the way it is after a direct answer (`DirectAnswer` includes a structured `question_asked` field; `SearchRequest` currently doesn't have an equivalent).
 
 ## Notes
 

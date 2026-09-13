@@ -16,61 +16,6 @@ MODEL_TO_CATEOGRY={
     "2":"Nvidia"
 }
 
-class SearchRequest(BaseModel):
-    action:Literal["search"]="search"
-    query_to_tavily:str=Field(
-        description="The search query."
-    )
-
-class DirectAnswer(BaseModel):
-    action:Literal["answer"]="answer"
-    final_answer:str=Field(
-        description="The final answer to the user."
-    )
-
-class FinalLlmAnswer(BaseModel):
-    decision: Union[SearchRequest,DirectAnswer]=Field(discriminator="action")
-
-global_fallback_openrouter=[
-    "nvidia/nemotron-3.5-lightning:free",
-    "liquid/lfm-2.5-2.6b:free",
-    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-    "google/gemma-4-26b-a4b-it:free",
-    "nvidia/nemotron-3-ultra-550b-a55b:free",
-    "google/gemma-4-31b-it:free",
-    "poolside/laguna-s-2.1:free",
-    "poolside/laguna-xs-2.1:free",
-    "cohere/north-mini-code:free",
-    "nvidia/nemotron-3-super-120b-a12b:free"]
-
-global_fallback_nvidia=[
-    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
-    "google/gemma-4-31b-it",
-    "openai/gpt-oss-20b",
-    "deepseek-ai/deepseek-v4-flash-0731",
-    "deepseek-ai/deepseek-v4-pro-0813",
-    "moonshotai/kimi-k3",
-    "nvidia/nemotron-3-ultra-550b-a55b",
-    "google/diffusiongemma-26b-a4b-it",
-    "poolside/laguna-xs-2.1",
-    "mistralai/mistral-nemotron",
-    "nvidia/nemotron-3-super-120b-a12b"]
-
-while True:
-    provider=input("""CHOOSE YOUR AI MODEL-
-        1. Openrouter (Recommended)
-        2. Nvidia       
-        """).strip()
-    
-    if provider in MODEL_TO_CATEOGRY:
-        provider=MODEL_TO_CATEOGRY[provider]
-    else:
-        provider=provider.capitalize()
-
-    if provider in ["Openrouter","Nvidia"]:
-        break
-    print("Not a valid option, try again")
-
 MODEL_CATEGORIES={ 
     "Speed":["nvidia/nemotron-3.5-lightning:free", "liquid/lfm-2.5-2.6b:free", "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free","google/gemma-4-26b-a4b-it:free"],
     "Research":["nvidia/nemotron-3-ultra-550b-a55b:free", "google/gemma-4-31b-it:free"],
@@ -105,6 +50,64 @@ FREE_MODELS_GROQ=[
     "groq/compound",
     "openai/gpt-oss-120b"
 ]
+
+global_fallback_openrouter=[
+    "nvidia/nemotron-3.5-lightning:free",
+    "liquid/lfm-2.5-2.6b:free",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "google/gemma-4-31b-it:free",
+    "poolside/laguna-s-2.1:free",
+    "poolside/laguna-xs-2.1:free",
+    "cohere/north-mini-code:free",
+    "nvidia/nemotron-3-super-120b-a12b:free"]
+
+global_fallback_nvidia=[
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+    "google/gemma-4-31b-it",
+    "openai/gpt-oss-20b",
+    "deepseek-ai/deepseek-v4-flash-0731",
+    "deepseek-ai/deepseek-v4-pro-0813",
+    "moonshotai/kimi-k3",
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "google/diffusiongemma-26b-a4b-it",
+    "poolside/laguna-xs-2.1",
+    "mistralai/mistral-nemotron",
+    "nvidia/nemotron-3-super-120b-a12b"]
+
+class SearchRequest(BaseModel):
+    action:Literal["search"]="search"
+    query_to_tavily:str=Field(
+        description="The search query."
+    )
+
+class DirectAnswer(BaseModel):
+    action:Literal["answer"]="answer"
+    final_answer:str=Field(
+        description="The final answer to the user."
+    )
+    question_asked:str=Field(
+        description="The question asked to the user to keep the conversation going."
+    )
+
+class FinalLlmAnswer(BaseModel):
+    decision: Union[SearchRequest,DirectAnswer]=Field(discriminator="action")
+
+while True:
+    provider=input("""CHOOSE YOUR AI MODEL-
+        1. Openrouter (Recommended)
+        2. Nvidia       
+        """).strip()
+    
+    if provider in MODEL_TO_CATEOGRY:
+        provider=MODEL_TO_CATEOGRY[provider]
+    else:
+        provider=provider.capitalize()
+
+    if provider in ["Openrouter","Nvidia"]:
+        break
+    print("Not a valid option, try again")
 
 if provider=="Openrouter":
     chosen_base_url="https://openrouter.ai/api/v1"
@@ -162,6 +165,7 @@ while True:
     start=time.time()
 
     available_improvers=list(improver)
+    active_model=None
     prompt_success=False
 
     while available_improvers:
@@ -262,11 +266,11 @@ while True:
         full_history.append(("user", user_input))
         history_points+=1   
 
-    max_retries=len(chosen_category)
-    attempts=0
+    available_answerers=list(chosen_category)
+    answer_success=False
 
-    while attempts<max_retries:   
-        chosen_model=random.choice(chosen_category)
+    while available_answerers:   
+        chosen_model=random.choice(available_answerers)
         print(f"Selected {chosen_model} for answering the user")
 
         try:
@@ -284,8 +288,7 @@ while True:
                 
             if response["parsed"] is None:
                 print(f"Model {chosen_model} threw an error. Retrying with another model.")
-                chosen_category.remove(chosen_model)
-                attempts+=1
+                available_answerers.remove(chosen_model)
                 continue
 
             decision_object=response["parsed"].decision
@@ -300,7 +303,7 @@ while True:
                 for query_result in query_results:
                     data1=query_result["title"]
                     data2=query_result["content"]
-                    total_data=("SEARCH RESULTS"+data1+" "+data2)
+                    total_data=("SEARCH RESULTS"+" "+data1+" "+data2)
                     conversation_history.append(("user",total_data)) 
 
                 web_results_analyzed=answer_llm.invoke(
@@ -314,6 +317,11 @@ while True:
                 print(web_results_analyzed.content)
                 token_used+=tokens_from_router+web_results_analyzed.usage_metadata["total_tokens"]
                 history_points+=len(query_results)+1  
+                end=time.time()
+                duration=end-start
+                print(f"Response took {duration:.2f} seconds")
+                print(f"Total tokens used are {token_used}.")
+                answer_success=True
 
             elif isinstance(decision_object,DirectAnswer):
                 final_text=decision_object.final_answer
@@ -323,27 +331,108 @@ while True:
                 print(final_text)
                 token_used+=tokens_from_router
                 history_points+=1
-            break                                                    
+                previous_question=decision_object.question_asked
+                conversation_questions.append(previous_question)
+                end=time.time()
+                duration=end-start
+                print(f"Response took {duration:.2f} seconds")
+                print(f"Total tokens used are {token_used}.")
+                answer_success=True
+            
+            if answer_success==True:
+                active_model=chosen_model
+                break                                                    
         except Exception as e:
             print(f"Model {chosen_model} failed at the task({e}).Retrying with another model ")
-            chosen_category.remove(chosen_model)
-            attempts+=1
+            available_answerers.remove(chosen_model)
+    if not answer_success:
+        print("ALL MODELS FROM THE DESIGNATED CATEOGRY FAILED. SWITCHING TO GLOBAL FALLBACK POOL OF MODELS.")
+        answer_fallback=list(global_fallback)
 
-    full_text=conversation_history[-1][1]
-    clean_text=full_text.strip()
-    paragraphs=clean_text.split("\n\n")
-    previous_question=paragraphs[-1].strip()
-    conversation_questions.append(previous_question)
+        while answer_fallback:
+            chosen_model4=random.choice(answer_fallback)
+            try:
+                answer_llm= ChatOpenAI(
+                    model=chosen_model4,
+                    base_url=chosen_base_url,
+                    api_key=chosen_api_key
+                )
+                structured_final_answer=answer_llm.with_structured_output(FinalLlmAnswer, include_raw=True)
+                response=structured_final_answer.invoke(
+                    [("system","""You are an AI assistant.
+                    Decide whether u need to run a live web search for answering the user accurately or if you can provide a direct answer.
+                    End your response with one relevant question if you decide not to search and want to continue the conversation naturally.
+                    Here is the history of the conversation helping you to understand context.""")]+conversation_history)
+                    
+                if response["parsed"] is None:
+                    print(f"Model {chosen_model4} threw an error. Retrying with another model.")
+                    answer_fallback.remove(chosen_model4)
+                    continue
 
-    end=time.time()
-    duration=end-start
-    print(f"Response took {duration:.2f} seconds")
-    print(f"Total tokens used are {token_used}.")
+                decision_object=response["parsed"].decision
+                tokens_from_router=response["raw"].usage_metadata["total_tokens"]
+                
+                if isinstance(decision_object,SearchRequest):
+                    query=decision_object.query_to_tavily
+                    tavilyclient=TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
+                    tavily_response=tavilyclient.search(query)
+                    query_results=tavily_response["results"]
 
-    if history_points>=6:
+                    for query_result in query_results:
+                        data1=query_result["title"]
+                        data2=query_result["content"]
+                        total_data=("SEARCH RESULTS"+" "+data1+" "+data2)
+                        conversation_history.append(("user",total_data)) 
+
+                    web_results_analyzed=answer_llm.invoke(
+                        [("system", """Answer the user's question clearly and helpfully.
+                    End your response with one relevant follow-up question to continue the conversation naturally.
+                    Here is the history of the conversation aiding you in understanding the context.""")]+conversation_history
+                    )
+                    conversation_history.append(("assistant", web_results_analyzed.content))
+                    full_history.append(("assistant", web_results_analyzed.content))
+                    print("\nFINAL ANSWER")
+                    print(web_results_analyzed.content)
+                    token_used+=tokens_from_router+web_results_analyzed.usage_metadata["total_tokens"]
+                    history_points+=len(query_results)+1  
+                    end=time.time()
+                    duration=end-start
+                    print(f"Response took {duration:.2f} seconds")
+                    print(f"Total tokens used are {token_used}.")
+                    answer_success=True
+
+                elif isinstance(decision_object,DirectAnswer):
+                    final_text=decision_object.final_answer
+                    conversation_history.append(("assistant", final_text))
+                    full_history.append(("assistant", final_text))
+                    print("\nFINAL ANSWER")
+                    print(final_text)
+                    token_used+=tokens_from_router
+                    history_points+=1
+                    previous_question=decision_object.question_asked
+                    conversation_questions.append(previous_question)
+                    end=time.time()
+                    duration=end-start
+                    print(f"Response took {duration:.2f} seconds")
+                    print(f"Total tokens used are {token_used}.")
+                    answer_success=True
+                
+                if answer_success==True:
+                    active_model=chosen_model4
+                    break    
+            except Exception as e:
+                print(F"Model {chosen_model4} failed at the task ({e}).Retrying with another model.")   
+                answer_fallback.remove(chosen_model4)
+    if not answer_success:
+        print(F"""ALL MODELS FAILED. 
+        PLEASE CHECK YOUR API KEYS AND ENSURE THAT YOU HAVE NOT EXHAUSTED YOUR LIMITS.
+        TRY USING ANOTHER PROVIDER.""")    
+        break
+
+    if history_points>=6 and active_model is not None:
 
         answer_llm= ChatOpenAI(
-            model=chosen_model,
+            model=active_model,
             base_url=chosen_base_url,
             api_key=chosen_api_key
         )
@@ -354,4 +443,4 @@ while True:
         summary_data=summary.content
         summarised_data.append(summary_data)
         conversation_history=[("assistant", f"Summary of previous context is {summary_data}")]
-        history_points=1     
+        history_points=1           
