@@ -133,6 +133,7 @@ summarised_data=[]
 full_history=[]
 conversation_history=[]
 conversation_questions=[]
+search_results=[]
 previous_question="This is the very first message."
 token_used=0
 history_points=0
@@ -304,19 +305,19 @@ while True:
                     data1=query_result["title"]
                     data2=query_result["content"]
                     total_data=("SEARCH RESULTS"+" "+data1+" "+data2)
-                    conversation_history.append(("user",total_data)) 
+                    search_results.append(("user", total_data))
 
                 web_results_analyzed=answer_llm.invoke(
                     [("system", """Answer the user's question clearly and helpfully.
                 End your response with one relevant follow-up question to continue the conversation naturally.
-                Here is the history of the conversation aiding you in understanding the context.""")]+conversation_history
+                Here is the history of the conversation aiding you in understanding the context.""")]+search_results+conversation_history
                 )
                 conversation_history.append(("assistant", web_results_analyzed.content))
                 full_history.append(("assistant", web_results_analyzed.content))
                 print("\nFINAL ANSWER")
                 print(web_results_analyzed.content)
                 token_used+=tokens_from_router+web_results_analyzed.usage_metadata["total_tokens"]
-                history_points+=len(query_results)+1  
+                history_points+=1  
                 end=time.time()
                 duration=end-start
                 print(f"Response took {duration:.2f} seconds")
@@ -382,12 +383,12 @@ while True:
                         data1=query_result["title"]
                         data2=query_result["content"]
                         total_data=("SEARCH RESULTS"+" "+data1+" "+data2)
-                        conversation_history.append(("user",total_data)) 
+                        search_results.append(("user",total_data)) 
 
                     web_results_analyzed=answer_llm.invoke(
                         [("system", """Answer the user's question clearly and helpfully.
                     End your response with one relevant follow-up question to continue the conversation naturally.
-                    Here is the history of the conversation aiding you in understanding the context.""")]+conversation_history
+                    Here is the history of the conversation aiding you in understanding the context.""")]+search_results+conversation_history
                     )
                     conversation_history.append(("assistant", web_results_analyzed.content))
                     full_history.append(("assistant", web_results_analyzed.content))
@@ -429,18 +430,32 @@ while True:
         TRY USING ANOTHER PROVIDER.""")    
         break
 
-    if history_points>=6 and active_model is not None:
+    if history_points>=6:
+        summary_success=False
+        summary_fallback=list(global_fallback)
+        while True:
+            try:
+                chosen_summary_model=random.choice(summary_fallback)
+                summary_llm= ChatOpenAI(
+                    model=chosen_summary_model,
+                    base_url=chosen_base_url,
+                    api_key=chosen_api_key
+                )
 
-        answer_llm= ChatOpenAI(
-            model=active_model,
-            base_url=chosen_base_url,
-            api_key=chosen_api_key
-        )
-
-        summary=answer_llm.invoke(
-            [("system","Summarize the conversation so far. Split the summary into two clear sections: user questions and AI responses.")]+conversation_history
-        )
-        summary_data=summary.content
-        summarised_data.append(summary_data)
-        conversation_history=[("assistant", f"Summary of previous context is {summary_data}")]
-        history_points=1           
+                summary=summary_llm.invoke(
+                    [("system","Summarize the conversation so far. Split the summary into two clear sections: user questions and AI responses.")]+conversation_history
+                )
+                summary_data=summary.content
+                summarised_data.append(summary_data)
+                conversation_history=[("assistant", f"Summary of previous context is {summary_data}")]
+                history_points=1  
+                summary_success=True
+            except:
+                summary_fallback.remove(chosen_summary_model)    
+ 
+            if not summary_fallback:
+                print("WARNING: All fallback models failed to summarize. Continuing with full context.")    
+                summary_success=True
+                break
+            if summary_success==True:
+                break             
