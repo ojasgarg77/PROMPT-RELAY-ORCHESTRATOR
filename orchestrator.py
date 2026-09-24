@@ -133,7 +133,6 @@ summarised_data=[]
 full_history=[]
 conversation_history=[]
 conversation_questions=[]
-search_results=[]
 previous_question="This is the very first message."
 token_used=0
 history_points=0
@@ -168,6 +167,7 @@ while True:
     available_improvers=list(improver)
     active_model=None
     prompt_success=False
+    search_results=[]
 
     while available_improvers:
         chosen_model2=random.choice(available_improvers)
@@ -334,6 +334,7 @@ while True:
                 history_points+=1
                 previous_question=decision_object.question_asked
                 conversation_questions.append(previous_question)
+                conversation_history.append(("assistant",previous_question))
                 end=time.time()
                 duration=end-start
                 print(f"Response took {duration:.2f} seconds")
@@ -412,6 +413,7 @@ while True:
                     history_points+=1
                     previous_question=decision_object.question_asked
                     conversation_questions.append(previous_question)
+                    conversation_history.append(("assistant",previous_question))
                     end=time.time()
                     duration=end-start
                     print(f"Response took {duration:.2f} seconds")
@@ -450,12 +452,10 @@ while True:
                 conversation_history=[("assistant", f"Summary of previous context is {summary_data}")]
                 history_points=1  
                 summary_success=True
+                break
             except:
                 summary_fallback.remove(chosen_summary_model)    
- 
-            if not summary_fallback:
-                print("WARNING: All fallback models failed to summarize. Continuing with full context.")    
-                summary_success=True
-                break
-            if summary_success==True:
-                break             
+
+        if not summary_success:
+            print("WARNING: All fallback models failed to summarize. Continuing with full context.")    
+    
