@@ -312,8 +312,12 @@ while True:
                 End your response with one relevant follow-up question to continue the conversation naturally.
                 Here is the history of the conversation aiding you in understanding the context.""")]+search_results+conversation_history
                 )
-                conversation_history.append(("assistant", web_results_analyzed.content))
-                full_history.append(("assistant", web_results_analyzed.content))
+                search_summary_block= (
+                f"""[System Note: A web search was performed for the query--{query}. """
+                f"""Summary of findings provided to user: {web_results_analyzed.content}]"""
+                )
+                conversation_history.append(("assistant", search_summary_block))
+                full_history.append(("assistant", search_summary_block))
                 print("\nFINAL ANSWER")
                 print(web_results_analyzed.content)
                 token_used+=tokens_from_router+web_results_analyzed.usage_metadata["total_tokens"]
@@ -391,8 +395,12 @@ while True:
                     End your response with one relevant follow-up question to continue the conversation naturally.
                     Here is the history of the conversation aiding you in understanding the context.""")]+search_results+conversation_history
                     )
-                    conversation_history.append(("assistant", web_results_analyzed.content))
-                    full_history.append(("assistant", web_results_analyzed.content))
+                    search_summary_block= (
+                    f"""[System Note: A web search was performed for the query--{query}. """
+                    f"""Summary of findings provided to user: {web_results_analyzed.content}]"""
+                    )
+                    conversation_history.append(("assistant", search_summary_block))
+                    full_history.append(("assistant", search_summary_block))
                     print("\nFINAL ANSWER")
                     print(web_results_analyzed.content)
                     token_used+=tokens_from_router+web_results_analyzed.usage_metadata["total_tokens"]
@@ -435,7 +443,7 @@ while True:
     if history_points>=6:
         summary_success=False
         summary_fallback=list(global_fallback)
-        while True:
+        while summary_fallback:
             try:
                 chosen_summary_model=random.choice(summary_fallback)
                 summary_llm= ChatOpenAI(
