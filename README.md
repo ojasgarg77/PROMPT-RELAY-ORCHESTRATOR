@@ -22,7 +22,7 @@ Choose Speed, Research, Coding, or Business as your priority. Each category maps
 The improver step checks for tool-call-style garbage tokens in its output and retries the same model (up to a few times) before giving up on it entirely.
 
 **Structured decision-making with Pydantic**
-Rather than parsing free-text signals, the answering model returns a validated, structured decision — either a direct answer or a request to search the web — using Pydantic models (`SearchRequest` / `DirectAnswer`) enforced via LangChain's structured output. A direct answer includes its own natural follow-up question as a structured field, rather than being extracted from raw text. If a search is requested, the tool queries the Tavily search API, feeds the results back into the conversation, and asks the model to produce a real answer using those results.
+Rather than parsing free-text signals, the answering model returns a validated, structured decision using Pydantic models. The tool checks for your Tavily API key dynamically on every turn. If the key is present, it uses FinalLlmAnswer (a Union of SearchRequest and DirectAnswer) to let the AI route the query. If the key is missing, it automatically skips the router union and binds the model strictly to DirectAnswer to force a direct, internal knowledge-base response without failing.
 
 **Conversation memory with auto-summarization**
 The tool tracks conversation history across turns. Once the history grows past a threshold, it's automatically summarized (split into "user questions" and "AI responses" sections) and replaced with a condensed summary, keeping later prompts from growing unmanageably long.
@@ -124,4 +124,4 @@ Known open item:
 ## Notes
 
 - If a model repeatedly fails, check that the corresponding API key is valid and that you haven't exceeded that provider's free-tier rate limits.
-- Web search requires a valid `TAVILY_API_KEY` — without one, a search decision will raise an error if triggered.
+- Web search functionality requires a valid TAVILY_API_KEY. If it is absent, the engine seamlessly routes queries straight to local knowledge execution via DirectAnswer to ensure uninterrupted use.

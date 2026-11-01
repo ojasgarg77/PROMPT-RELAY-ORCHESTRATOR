@@ -280,10 +280,23 @@ while True:
                 base_url=chosen_base_url,
                 api_key=chosen_api_key
             )
-            structured_final_answer=answer_llm.with_structured_output(FinalLlmAnswer, include_raw=True)
-            response=structured_final_answer.invoke(
+
+            has_tavily_file=bool(os.getenv("TAVILY_API_KEY"))
+
+            if has_tavily_file:
+                structured_final_answer=answer_llm.with_structured_output(FinalLlmAnswer, include_raw=True)
+                response=structured_final_answer.invoke(
                 [("system","""You are an AI assistant.
                 Decide whether u need to run a live web search for answering the user accurately or if you can provide a direct answer.
+                End your response with one relevant question if you decide not to search and want to continue the conversation naturally.
+                Here is the history of the conversation helping you to understand context.""")]+conversation_history)
+
+            else:
+                input("\nNO TAVILY API KEY FOUND. MODEL WILL BE UNABLE TO PULL LIVE SEARCHES THROUGH TAVILY.\nPRESS ENTER TO CONTINUE--\n")
+                structured_final_answer=answer_llm.with_structured_output(DirectAnswer,include_raw=True)
+                response=structured_final_answer.invoke(
+                [("system","""You are an AI assistant.
+                Provide a direct answer to the user.
                 End your response with one relevant question if you decide not to search and want to continue the conversation naturally.
                 Here is the history of the conversation helping you to understand context.""")]+conversation_history)
                 
@@ -296,6 +309,7 @@ while True:
             tokens_from_router=response["raw"].usage_metadata["total_tokens"]
             
             if isinstance(decision_object,SearchRequest):
+
                 query=decision_object.query_to_tavily
                 tavilyclient=TavilyClient(api_key=os.getenv("TAVILY_API_KEY"))
                 tavily_response=tavilyclient.search(query)
@@ -304,6 +318,7 @@ while True:
                 for query_result in query_results:
                     data1=query_result["title"]
                     data2=query_result["content"]
+                    
                     total_data=("SEARCH RESULTS"+" "+data1+" "+data2)
                     search_results.append(("user", total_data))
 
@@ -312,37 +327,50 @@ while True:
                 End your response with one relevant follow-up question to continue the conversation naturally.
                 Here is the history of the conversation aiding you in understanding the context.""")]+search_results+conversation_history
                 )
+
                 search_summary_block= (
                 f"""[System Note: A web search was performed for the query--{query}. """
                 f"""Summary of findings provided to user: {web_results_analyzed.content}]"""
                 )
+
                 conversation_history.append(("assistant", search_summary_block))
                 full_history.append(("assistant", search_summary_block))
+
                 print("\nFINAL ANSWER")
                 print(web_results_analyzed.content)
+
                 token_used+=tokens_from_router+web_results_analyzed.usage_metadata["total_tokens"]
                 history_points+=1  
+
                 end=time.time()
                 duration=end-start
+
                 print(f"Response took {duration:.2f} seconds")
                 print(f"Total tokens used are {token_used}.")
+
                 answer_success=True
 
             elif isinstance(decision_object,DirectAnswer):
                 final_text=decision_object.final_answer
                 conversation_history.append(("assistant", final_text))
                 full_history.append(("assistant", final_text))
+
                 print("\nFINAL ANSWER")
                 print(final_text)
+
                 token_used+=tokens_from_router
                 history_points+=1
+
                 previous_question=decision_object.question_asked
                 conversation_questions.append(previous_question)
                 conversation_history.append(("assistant",previous_question))
+
                 end=time.time()
                 duration=end-start
+
                 print(f"Response took {duration:.2f} seconds")
                 print(f"Total tokens used are {token_used}.")
+
                 answer_success=True
             
             if answer_success==True:
@@ -466,4 +494,3 @@ while True:
 
         if not summary_success:
             print("WARNING: All fallback models failed to summarize. Continuing with full context.")    
-    
