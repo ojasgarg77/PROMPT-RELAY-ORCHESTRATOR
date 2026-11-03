@@ -9,14 +9,16 @@ Every message you send goes through two steps: first, a small/fast "improver" mo
 
 **Provider choice**
 Pick between OpenRouter or NVIDIA as your model provider at startup. Each has its own set of free models mapped into the same four priority categories.
+Note: If you select a provider whose corresponding API key (OPENROUTER_API_KEY or NVIDIA_API_KEY) is missing from your .env file, the orchestrator will interactively prompt you to fallback to the alternative provider.
 
 **Priority-based model categories**
 Choose Speed, Research, Coding, or Business as your priority. Each category maps to a curated list of free models suited to that kind of task, and a model is picked at random from that list for each answer.
 
 **Three-tier retry and fallback**
-- *Improver stage:* if the randomly chosen improver model fails or returns garbled output, it's dropped from a per-turn candidate list and another is tried. If every model in the primary provider's improver list fails, the tool falls back to a set of free Groq models before finally falling back to using your raw, unimproved input.
-- *Answering stage:* if the randomly chosen answering model fails, it's dropped from a per-turn candidate list (the shared category list itself is never permanently modified) and another model from the same category is tried.
-- *Global fallback:* if every model in the chosen priority category fails, the tool automatically switches to a broader, provider-wide pool of fallback models before giving up entirely.
+- *Startup Provider Fallback:* If your selected provider's key is missing from your `.env` file, the CLI interactively prompts you to switch providers rather than crashing.
+- *Improver stage:* If the randomly chosen improver model fails or returns glibberish, it's dropped from a per-turn candidate list and another is tried. If every model in the primary provider's improver list fails, the tool falls back to a set of free Groq models. If `GROQ_API_KEY` is missing, the script pauses and prompts you to press Enter to continue without Groq fallback.
+- *Answering stage:* If the randomly chosen answering model fails, it's dropped from a per-turn candidate list (the shared category list itself is never permanently modified) and another model from the same category is tried.
+- *Global fallback:* If every model in the chosen priority category fails, the tool automatically switches to a broader, provider-wide pool of fallback models before giving up entirely.
 
 **Garbage-output detection**
 The improver step checks for tool-call-style garbage tokens in its output and retries the same model (up to a few times) before giving up on it entirely.
@@ -34,8 +36,9 @@ Every turn reports how many tokens were used (including any extra tokens spent o
 
 - Python 3.10 or newer
 - At least one of: a free OpenRouter account, or a free NVIDIA Build account
-- A free Groq account (used as the improver-stage fallback)
-- A free Tavily account (used for web search)
+- A free Groq account (used as the improver-stage fallback)(optional)
+- A free Tavily account (used for web search)(optional)
+- A mandatory `.env` file in the project root (the script will check for this and exit on startup if it's missing)
 
 You don't need every single provider to try the tool — but the improver fallback and the web search feature won't work without Groq and Tavily keys respectively.
 
@@ -77,9 +80,10 @@ Create a file named exactly `.env` in the project root with the following four l
 ```
 OPENROUTER_API_KEY=your_openrouter_key_here
 NVIDIA_API_KEY=your_nvidia_key_here
-GROQ_API_KEY=your_groq_key_here
-TAVILY_API_KEY=your_tavily_key_here
+GROQ_API_KEY=your_groq_key_here(optional)
+TAVILY_API_KEY=your_tavily_key_here(optional)
 ```
+**Note:** The script automatically checks for the existence of this file right when it launches. If the `.env` file is missing from the project root, the program will print a critical error and exit immediately.
 
 ### Getting an OpenRouter API key
 1. Sign up at [openrouter.ai](https://openrouter.ai).
