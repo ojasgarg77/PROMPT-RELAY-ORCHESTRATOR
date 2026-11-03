@@ -6,6 +6,12 @@ import time
 from tavily import TavilyClient
 from pydantic import BaseModel,Field
 from typing import List,Union,Literal
+import sys
+from pathlib import Path
+
+if not Path(".env").is_file():
+    print("ENV FILE IS NOT FOUND.\nPLEASE CREATE ONE BASED ON INSTRUCTIONS GIVEN IN READ ME.\nEXITING THIS FILE--")
+    sys.exit(1)
 
 load_dotenv()
 
@@ -109,18 +115,59 @@ while True:
         break
     print("Not a valid option, try again")
 
-if provider=="Openrouter":
-    chosen_base_url="https://openrouter.ai/api/v1"
-    chosen_api_key=os.getenv("OPENROUTER_API_KEY")
-    cateogry=MODEL_CATEGORIES
-    improver=FREE_MODELS
-    global_fallback=global_fallback_openrouter
-else:
-    chosen_base_url="https://integrate.api.nvidia.com/v1"
-    chosen_api_key=os.getenv("NVIDIA_API_KEY")
-    cateogry=MODEL_CATEGORIES_NVIDIA
-    improver=FREE_MODELS_NVIDIA
-    global_fallback=global_fallback_nvidia
+while True:
+    if provider=="Openrouter":
+        chosen_base_url="https://openrouter.ai/api/v1"
+        chosen_api_key=os.getenv("OPENROUTER_API_KEY")
+        cateogry=MODEL_CATEGORIES
+        improver=FREE_MODELS
+        global_fallback=global_fallback_openrouter
+
+        has_openrouter_file=bool(os.getenv("OPENROUTER_API_KEY"))
+
+        if has_openrouter_file:
+            break
+
+        if not has_openrouter_file:
+            print("\nNO OPENROUTER API KEY FOUND. MODEL WILL BE UNABLE TO ANSWER.\n")
+            print("NOTE THAT WITHOUT NVIDIA API KEY OR OPENROUTER API KEY THE SCRIPT WILL NOT WORK\n")
+            while True:
+                nvidia_fallback_question=input("DO YOU WANT TO FALLBACK TO NVIDIA LM FOR ANSWERING? (Y/N)").lower().strip()
+                if nvidia_fallback_question in ("y","yes"):
+                    provider="Nvidia"
+                    break
+                elif nvidia_fallback_question in ("n","no"):
+                    print("EXITING THE FILE--")
+                    sys.exit(1)
+                else:
+                    print("Invalid input.Please enter 'y' or 'n'\n")
+
+    if provider=="Nvidia":
+        chosen_base_url="https://integrate.api.nvidia.com/v1"
+        chosen_api_key=os.getenv("NVIDIA_API_KEY")
+        cateogry=MODEL_CATEGORIES_NVIDIA
+        improver=FREE_MODELS_NVIDIA
+        global_fallback=global_fallback_nvidia
+
+        has_nvidia_file=bool(os.getenv("NVIDIA_API_KEY"))
+
+        if has_nvidia_file:
+            break
+
+        if not has_nvidia_file:
+            print("\nNO NVIDIA API KEY FOUND. MODEL WILL BE UNABLE TO ANSWER.\n")
+            print("NOTE THAT WITHOUT NVIDIA API KEY OR OPENROUTER API KEY THE SCRIPT WILL NOT WORK\n")
+            while True:
+                openrouter_fallback_question=input("DO YOU WANT TO FALLBACK TO OPENROUTER FOR ANSWERING? (Y/N)").lower().strip()
+                if openrouter_fallback_question in ("y","yes"):
+                    provider="Openrouter"
+                    break
+                elif openrouter_fallback_question in ("n","no"):
+                    print("EXITING THE FILE--")
+                    sys.exit()
+                else:
+                    print("Invalid input.Please enter 'y' or 'n'\n")
+
 
 NUMBER_TO_CATEGORY={
     "1":"Speed",
@@ -211,7 +258,6 @@ while True:
                     print("\nImproved Prompt:")
                     print(improved_prompt)
                     prompt_success=True
-                    history_points+=1
                     break
             if prompt_success==True:  
                 break  
@@ -224,48 +270,53 @@ while True:
         print("ALL PRIMARY IMPROVER MODELS FAILED. SWITCHING TO GROQ.")
         groq_improvers=list(FREE_MODELS_GROQ)
 
-        while groq_improvers:
-            chosen_model3=random.choice(groq_improvers)
-            try:
-                groq_improver_llm=ChatOpenAI(
-                    model=chosen_model3,
-                    base_url="https://api.groq.com/openai/v1",
-                    api_key=os.getenv("GROQ_API_KEY")
-                )
+        has_groq_file=bool(os.getenv("GROQ_API_KEY"))
 
-                response = groq_improver_llm.invoke([
-                        ("system", f"""You are a prompt improver.ONLY print the single best improved prompt nothing else.
-                        To help you understand context, the last question which the AI asked the user is:
-                        {previous_question}
+        if has_groq_file:
 
-                        Rewrite the user's message into a clearer, more concise prompt.
-                        Do not answer the request — output ONLY the single best improved prompt and nothing else.
+            while groq_improvers:
+                chosen_model3=random.choice(groq_improvers)
+                try:
+                    groq_improver_llm=ChatOpenAI(
+                        model=chosen_model3,
+                        base_url="https://api.groq.com/openai/v1",
+                        api_key=os.getenv("GROQ_API_KEY")
+                    )
 
-                Example:
-                Input: "Explain Elon Musk and Jeff Bezos connection to daily trade actually leave out Jeff Bezos and include finance too"
-                Output: "Establish Elon Musks connection with daily trade and finance"
-                """),
-                    ("user", user_input)
-                ])
+                    response = groq_improver_llm.invoke([
+                            ("system", f"""You are a prompt improver.ONLY print the single best improved prompt nothing else.
+                            To help you understand context, the last question which the AI asked the user is:
+                            {previous_question}
 
-                improved_prompt=response.content
-                conversation_history.append(("user", improved_prompt))
-                full_history.append(("user", improved_prompt))
-                print(f"\nImproved Prompt:")
-                print(improved_prompt)
-                prompt_success=True
-                history_points+=1
-                break
+                            Rewrite the user's message into a clearer, more concise prompt.
+                            Do not answer the request — output ONLY the single best improved prompt and nothing else.
 
-            except Exception as e:
-                print(f"Groq model {chosen_model3} failed at the task ({e}). Retrying with another Groq model.")
-                groq_improvers.remove(chosen_model3)
+                    Example:
+                    Input: "Explain Elon Musk and Jeff Bezos connection to daily trade actually leave out Jeff Bezos and include finance too"
+                    Output: "Establish Elon Musks connection with daily trade and finance"
+                    """),
+                        ("user", user_input)
+                    ])
+
+                    improved_prompt=response.content
+                    conversation_history.append(("user", improved_prompt))
+                    full_history.append(("user", improved_prompt))
+                    print(f"\nImproved Prompt:")
+                    print(improved_prompt)
+                    prompt_success=True
+                    break
+
+                except Exception as e:
+                    print(f"Groq model {chosen_model3} failed at the task ({e}). Retrying with another Groq model.")
+                    groq_improvers.remove(chosen_model3)
+
+        else:
+            input("\nNO GROQ API KEY FOUND. MODEL WILL BE UNABLE TO FALLBACK THROUGH GROQ.\nPRESS ENTER TO CONTINUE--\n")
 
     if not prompt_success:
         print(f"ALL IMPROVERS INCLUDING GROQ FAILED. USING ORIGNAL RAW OUTPUT.")
         conversation_history.append(("user", user_input))
         full_history.append(("user", user_input))
-        history_points+=1   
 
     available_answerers=list(chosen_category)
     answer_success=False
@@ -290,6 +341,7 @@ while True:
                 Decide whether u need to run a live web search for answering the user accurately or if you can provide a direct answer.
                 End your response with one relevant question if you decide not to search and want to continue the conversation naturally.
                 Here is the history of the conversation helping you to understand context.""")]+conversation_history)
+                decision_object=response["parsed"].decision
 
             else:
                 input("\nNO TAVILY API KEY FOUND. MODEL WILL BE UNABLE TO PULL LIVE SEARCHES THROUGH TAVILY.\nPRESS ENTER TO CONTINUE--\n")
@@ -299,13 +351,13 @@ while True:
                 Provide a direct answer to the user.
                 End your response with one relevant question if you decide not to search and want to continue the conversation naturally.
                 Here is the history of the conversation helping you to understand context.""")]+conversation_history)
+                decision_object=response["parsed"]
                 
             if response["parsed"] is None:
                 print(f"Model {chosen_model} threw an error. Retrying with another model.")
                 available_answerers.remove(chosen_model)
                 continue
 
-            decision_object=response["parsed"].decision
             tokens_from_router=response["raw"].usage_metadata["total_tokens"]
             
             if isinstance(decision_object,SearchRequest):
@@ -391,12 +443,25 @@ while True:
                     base_url=chosen_base_url,
                     api_key=chosen_api_key
                 )
-                structured_final_answer=answer_llm.with_structured_output(FinalLlmAnswer, include_raw=True)
-                response=structured_final_answer.invoke(
+
+                if has_tavily_file:
+                    structured_final_answer=answer_llm.with_structured_output(FinalLlmAnswer, include_raw=True)
+                    response=structured_final_answer.invoke(
                     [("system","""You are an AI assistant.
                     Decide whether u need to run a live web search for answering the user accurately or if you can provide a direct answer.
                     End your response with one relevant question if you decide not to search and want to continue the conversation naturally.
                     Here is the history of the conversation helping you to understand context.""")]+conversation_history)
+                    decision_object=response["parsed"].decision
+
+                else:
+                    input("\nNO TAVILY API KEY FOUND. MODEL WILL BE UNABLE TO PULL LIVE SEARCHES THROUGH TAVILY.\nPRESS ENTER TO CONTINUE--\n")
+                    structured_final_answer=answer_llm.with_structured_output(DirectAnswer,include_raw=True)
+                    response=structured_final_answer.invoke(
+                    [("system","""You are an AI assistant.
+                    Provide a direct answer to the user.
+                    End your response with one relevant question if you decide not to search and want to continue the conversation naturally.
+                    Here is the history of the conversation helping you to understand context.""")]+conversation_history)
+                    decision_object=response["parsed"]
                     
                 if response["parsed"] is None:
                     print(f"Model {chosen_model4} threw an error. Retrying with another model.")
@@ -463,7 +528,7 @@ while True:
                 print(F"Model {chosen_model4} failed at the task ({e}).Retrying with another model.")   
                 answer_fallback.remove(chosen_model4)
     if not answer_success:
-        print(F"""ALL MODELS FAILED. 
+        print(f"""ALL MODELS FAILED. 
         PLEASE CHECK YOUR API KEYS AND ENSURE THAT YOU HAVE NOT EXHAUSTED YOUR LIMITS.
         TRY USING ANOTHER PROVIDER.""")    
         break
