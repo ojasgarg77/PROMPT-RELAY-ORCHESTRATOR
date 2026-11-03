@@ -45,8 +45,8 @@ You don't need every single provider to try the tool — but the improver fallba
 ## 1. Clone the repository
 
 ```bash
-git clone <your-repo-url>
-cd <your-repo-folder>
+git clone https://github.com/ojasgarg77/PROMPT-RELAY-ORCHESTRATOR
+cd prompt-relay-orchestrator
 ```
 
 ## 2. Create and activate a virtual environment
