@@ -122,6 +122,10 @@ This project is under active development, written entirely by hand while I'm sti
 
 The category-list mutation bug and the missing global fallback wiring (previously listed here as known issues) have both been fixed: the answering stage now works from a per-turn copy of its model list, and a genuine global fallback pool kicks in if an entire category fails.
 
+**Planned Enhancements / To-Do:**
+- **Structured JSONL Fallback & Attempt Logging:** Implement an append-only JSONL event logger per attempt to streamline debugging. 
+Each turn will be assigned a unique `run_id`, recording the stage, provider/model, attempt number, failure class (`malformed_output`, `rate_limit`, `timeout`, `auth/config`), retryability flag, and subsequent fallback action, along with timestamps and durations while explicitly excluding raw prompts, responses, and API keys for privacy and security.
+
 Known open item:
 - After a search-based turn, the follow-up question isn't tracked the way it is after a direct answer (`DirectAnswer` includes a structured `question_asked` field; `SearchRequest` currently doesn't have an equivalent).
 
